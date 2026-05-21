@@ -1,6 +1,6 @@
 # Offline Packages
 
-Put these files here when `ALLOW_DOWNLOAD=false`:
+Download these files from GitHub Release and put them here when `ALLOW_DOWNLOAD=false`:
 
 - `prometheus-3.11.1.linux-amd64.tar.gz`
 - `grafana-enterprise_12.4.1_22846628243_linux_amd64.tar.gz`

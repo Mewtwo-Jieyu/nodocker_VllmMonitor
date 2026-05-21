@@ -44,13 +44,19 @@
 
 ## 离线包
 
-默认不联网下载，先把这些文件放好：
+默认不联网下载。先从 GitHub Release 下载离线包，再放到对应目录：
 
 | 目录 | 文件 |
 |---|---|
 | `dist/` | `prometheus-3.11.1.linux-amd64.tar.gz` |
 | `dist/` | `grafana-enterprise_12.4.1_22846628243_linux_amd64.tar.gz` |
 | `alertmanager_feishu/dist/` | `alertmanager-0.28.1.linux-amd64.tar.gz` |
+
+Release 地址：
+
+```text
+https://github.com/Mewtwo-Jieyu/nodocker_VllmMonitor/releases
+```
 
 如果机器可以访问公网，可以部署时加：
 
