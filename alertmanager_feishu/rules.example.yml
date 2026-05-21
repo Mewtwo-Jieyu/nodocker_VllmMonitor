@@ -1,0 +1,44 @@
+groups:
+- name: test-alerts
+  rules:
+
+  - alert: TestAlert
+    expr: vector(1)
+    labels:
+      severity: warning
+      service: test
+    annotations:
+      summary: "测试告警"
+      description: "Prometheus -> Alertmanager -> Feishu 链路测试，应收到此消息表示全链路通。"
+
+- name: vllm-alerts
+  rules:
+
+  - alert: VLLMTargetDown
+    expr: up{job=~"vllm-.*"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 服务不可达"
+      description: "服务 {{ $labels.service }} metrics 抓取失败超过 2 分钟"
+
+  - alert: VLLMHighErrorRate
+    expr: |
+      rate(vllm:request_success_total{status=~"5.."}[5m])
+      / rate(vllm:request_success_total[5m]) > 0.05
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 5xx 错误率 > 5%"
+      description: "服务 {{ $labels.service }} 5xx 占比 {{ $value | humanizePercentage }}"
+
+  - alert: VLLMHighLatencyP99
+    expr: histogram_quantile(0.99, rate(vllm:time_to_first_token_seconds_bucket[5m])) > 5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "vLLM TTFT P99 延迟 > 5s"
+      description: "服务 {{ $labels.service }} P99 TTFT = {{ $value }}s"

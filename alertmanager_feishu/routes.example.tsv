@@ -1,0 +1,5 @@
+# route_name	matchers	feishu_webhook	feishu_secret
+# matchers 为空表示默认路由（所有未匹配的告警）
+# matchers 格式: key=value（单条件匹配）
+# feishu_secret 可选，用于飞书签名校验
+default		https://open.feishu.cn/open-apis/bot/v2/hook/replace-with-your-webhook

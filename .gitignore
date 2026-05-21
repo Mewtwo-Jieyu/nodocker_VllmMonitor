@@ -1,0 +1,32 @@
+# Generated instance configs
+env.*.local
+services.*.tsv
+routes.*.tsv
+rules.*.yml
+service_ids.*.tsv
+!services.example.tsv
+!alertmanager_feishu/routes.example.tsv
+!alertmanager_feishu/rules.example.yml
+
+# Runtime and logs
+*.pid
+*.log
+logs/
+data/
+downloads/
+run/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Offline binary packages are large; keep README files only.
+dist/*
+!dist/README.md
+alertmanager_feishu/dist/*
+!alertmanager_feishu/dist/README.md
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/

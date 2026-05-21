@@ -1,0 +1,3 @@
+# service_name	scheme	target	metrics_path
+qwen35	http	qwen-metrics.example.com	/metrics
+kimi25	http	kimi-metrics.example.com	/metrics
