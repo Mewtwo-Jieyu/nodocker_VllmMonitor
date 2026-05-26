@@ -44,7 +44,15 @@
 
 ## 离线包
 
-默认不联网下载。先从 GitHub Release 下载离线包，再放到对应目录：
+默认不联网下载。拉完仓库后先执行：
+
+```bash
+bash download_release_assets.sh
+```
+
+如果下载 GitHub Release 需要代理，先在当前 shell 加代理，再执行上面的命令。
+
+脚本会从 GitHub Release 下载并校验这些离线包：
 
 | 目录 | 文件 |
 |---|---|
