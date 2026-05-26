@@ -77,6 +77,13 @@ bash quick_deploy_with_alerts.sh deploy \
   --metrics-service kimi25 http kimi-metrics.example.com /metrics
 ```
 
+如果脚本报 `set: pipefail: invalid option name`，通常是文件被 Windows 转成了 `CRLF` 换行。先在 Linux 仓库目录执行：
+
+```bash
+sed -i 's/\r$//' *.sh alertmanager_feishu/*.sh alertmanager_feishu/feishu_relay.py
+bash -n quick_deploy_with_alerts.sh deploy.sh start.sh stop.sh check.sh render_configs.sh
+```
+
 启用飞书告警：
 
 ```bash
