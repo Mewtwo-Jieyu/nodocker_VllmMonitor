@@ -74,6 +74,8 @@ https://github.com/Mewtwo-Jieyu/nodocker_VllmMonitor/releases
 
 ## 快速部署
 
+如果是在远程开发机上部署，然后从本地电脑打开 Grafana，先看 [开发机部署指南](DEV_MACHINE_DEPLOY.md)。
+
 不启用告警：
 
 ```bash
