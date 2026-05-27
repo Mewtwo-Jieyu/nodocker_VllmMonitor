@@ -16,7 +16,7 @@
 
 | 项目 | 要求 |
 |---|---|
-| SSH | 本地能执行 `ssh h200_ais` |
+| SSH | 本地能执行 `ssh 开发机` |
 | 端口 | 开发机上 Grafana/Prometheus 端口未被占用 |
 | 网络 | 开发机能访问 vLLM 服务的 `/metrics` |
 | 离线包 | 执行 `download_release_assets.sh` 下载，或本地下载后 `scp` 到开发机 |
@@ -27,14 +27,14 @@
 ### 1. 登录开发机
 
 ```bash
-ssh h200_ais
+ssh 开发机
 ```
 
 ### 2. 拉取仓库
 
 ```bash
-mkdir -p /mnt/shared-storage-user/ailab-sys/zhaojieyu/vllm_monitor
-cd /mnt/shared-storage-user/ailab-sys/zhaojieyu/vllm_monitor
+mkdir -p /mnt/shared-storage-user/ailab-sys/xxx
+cd /mnt/shared-storage-user/ailab-sys/xxx
 
 git clone https://github.com/Mewtwo-Jieyu/nodocker_VllmMonitor.git
 cd nodocker_VllmMonitor
@@ -43,7 +43,7 @@ cd nodocker_VllmMonitor
 如果已经 clone 过：
 
 ```bash
-cd /mnt/shared-storage-user/ailab-sys/zhaojieyu/vllm_monitor/nodocker_VllmMonitor
+cd /mnt/shared-storage-user/ailab-sys/xxx/nodocker_VllmMonitor
 git pull
 ```
 
@@ -63,7 +63,7 @@ git clone https://github.com/Mewtwo-Jieyu/nodocker_VllmMonitor.git
 cd nodocker_VllmMonitor
 bash download_release_assets.sh
 
-scp -r nodocker_VllmMonitor h200_ais:/mnt/shared-storage-user/ailab-sys/zhaojieyu/vllm_monitor/
+scp -r nodocker_VllmMonitor 开发机:/mnt/shared-storage-user/ailab-sys/xxx
 ```
 
 ### 4. 部署监控服务
@@ -71,15 +71,15 @@ scp -r nodocker_VllmMonitor h200_ais:/mnt/shared-storage-user/ailab-sys/zhaojiey
 下面例子监控两个 vLLM 服务，不启用飞书告警：
 
 ```bash
-cd /mnt/shared-storage-user/ailab-sys/zhaojieyu/vllm_monitor/nodocker_VllmMonitor
+cd /mnt/shared-storage-user/ailab-sys/xxx/nodocker_VllmMonitor
 
 bash quick_deploy_with_alerts.sh deploy \
-  --install-root /tmp/zhaojieyu/vllm_monitor/kimi-k25-monitor \
-  --env-file env.kimi-k25.local \
+  --install-root /mnt/shared-storage-user/ailab-sys/xxx \
+  --env-file env.自定义命名.local \
   --service-domain localhost \
   --admin-password admin \
-  --metrics-service kimi-k25-mooncake http 10.140.158.149:8140 /metrics \
-  --metrics-service kimi-k25-single http 10.140.158.149:8142 /metrics \
+  --metrics-service 服务名id1 http e.g.10.140.158.149:8140 /metrics \
+  --metrics-service 服务名id2 http 服务调用 ip 端口 /metrics \
   --prometheus-port 19090 \
   --grafana-port 13000 \
   --enable-alerts false
@@ -100,7 +100,7 @@ bash quick_deploy_with_alerts.sh deploy \
 ### 5. 检查部署
 
 ```bash
-bash quick_deploy_with_alerts.sh check --env-file env.kimi-k25.local
+bash quick_deploy_with_alerts.sh check --env-file env.自定义名.local
 ```
 
 看到下面几类输出才算正常：
@@ -118,7 +118,7 @@ bash quick_deploy_with_alerts.sh check --env-file env.kimi-k25.local
 在本地电脑新开一个终端：
 
 ```bash
-ssh -N -L 13000:127.0.0.1:13000 h200_ais
+ssh -N -L 13000:127.0.0.1:13000 开发机
 ```
 
 然后浏览器打开：
@@ -141,8 +141,8 @@ http://127.0.0.1:13000/grafana/
 停止当前监控实例：
 
 ```bash
-cd /mnt/shared-storage-user/ailab-sys/zhaojieyu/vllm_monitor/nodocker_VllmMonitor
-bash stop.sh --env-file env.kimi-k25.local
+cd /mnt/shared-storage-user/ailab-sys/xxx/nodocker_VllmMonitor
+bash stop.sh --env-file env.自定义命名.local
 ```
 
 重启或改服务列表时，重新执行 `deploy` 命令即可。脚本会先停旧进程，再按新配置启动。
