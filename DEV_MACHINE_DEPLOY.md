@@ -32,6 +32,12 @@ ssh 开发机
 
 ### 2. 拉取仓库
 
+如果开发机访问 GitHub 需要代理，先在当前 shell 执行：
+
+```bash
+source <(curl -sSL http://deploy.i.h.pjlab.org.cn/infra/scripts/setup_proxy.sh)
+```
+
 ```bash
 mkdir -p /mnt/shared-storage-user/ailab-sys/xxx
 cd /mnt/shared-storage-user/ailab-sys/xxx
@@ -49,12 +55,13 @@ git pull
 
 ### 3. 准备离线包
 
-开发机下载 GitHub Release 需要代理时：
+如果上一步已经在同一个 shell 里加过代理，直接执行：
 
 ```bash
-source <(curl -sSL http://deploy.i.h.pjlab.org.cn/infra/scripts/setup_proxy.sh)
 bash download_release_assets.sh
 ```
+
+第一次下载三个离线包通常需要几分钟。后续重复执行会先校验本地缓存，校验通过就不会重新下载。
 
 如果开发机不能下载，也可以在本地电脑下载后传过去：
 
@@ -74,12 +81,12 @@ scp -r nodocker_VllmMonitor 开发机:/mnt/shared-storage-user/ailab-sys/xxx
 cd /mnt/shared-storage-user/ailab-sys/xxx/nodocker_VllmMonitor
 
 bash quick_deploy_with_alerts.sh deploy \
-  --install-root /mnt/shared-storage-user/ailab-sys/xxx \
-  --env-file env.自定义命名.local \
+  --install-root /tmp/xxx/vllm-monitor/demo-monitor \
+  --env-file env.demo.local \
   --service-domain localhost \
   --admin-password admin \
-  --metrics-service 服务名id1 http e.g.10.140.158.149:8140 /metrics \
-  --metrics-service 服务名id2 http 服务调用 ip 端口 /metrics \
+  --metrics-service service-a http 10.140.158.149:8140 /metrics \
+  --metrics-service service-b http 10.140.158.149:8142 /metrics \
   --prometheus-port 19090 \
   --grafana-port 13000 \
   --enable-alerts false
@@ -100,7 +107,7 @@ bash quick_deploy_with_alerts.sh deploy \
 ### 5. 检查部署
 
 ```bash
-bash quick_deploy_with_alerts.sh check --env-file env.自定义名.local
+bash quick_deploy_with_alerts.sh check --env-file env.demo.local
 ```
 
 看到下面几类输出才算正常：
@@ -142,7 +149,7 @@ http://127.0.0.1:13000/grafana/
 
 ```bash
 cd /mnt/shared-storage-user/ailab-sys/xxx/nodocker_VllmMonitor
-bash stop.sh --env-file env.自定义命名.local
+bash stop.sh --env-file env.demo.local
 ```
 
 重启或改服务列表时，重新执行 `deploy` 命令即可。脚本会先停旧进程，再按新配置启动。
