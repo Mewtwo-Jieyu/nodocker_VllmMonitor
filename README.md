@@ -136,6 +136,10 @@ bash quick_deploy_with_alerts.sh check --env-file env.demo.local --send-test
 | `[TEST]` 飞书消息 | webhook / 代理 / relay 链路正常 |
 | `metrics target unreachable` | 监控机访问不到该服务 `/metrics` |
 
+## Dashboard 服务过滤
+
+Grafana dashboard 的 `service` 下拉按指标自动分组：router dashboard 只显示暴露 `vllm_router_active_workers` 的服务，vLLM dashboard 只显示暴露 `vllm:num_requests_running` 的服务。不依赖服务名，也不需要额外 CLI 参数。
+
 ## 当前告警规则
 
 | 告警 | 条件 | 持续时间 |
