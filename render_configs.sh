@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-}"
 
+# shellcheck source=lib/service_config.sh
+source "${SCRIPT_DIR}/lib/service_config.sh"
+
 if [[ "${1:-}" == "--env-file" ]]; then
   if [[ -z "${2:-}" ]]; then
     echo "--env-file 缺少参数"
@@ -103,40 +106,32 @@ scrape_configs:
 EOF
 
 service_count=0
-while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path extra; do
+while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
   if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
     continue
   fi
-  if [[ -n "${extra:-}" ]]; then
-    echo "服务列表字段过多，必须是 4 列: ${service_name}"
-    exit 1
-  fi
-  if [[ ! "${service_name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
-    echo "service_name 只能用字母、数字、下划线、短横线: ${service_name}"
-    exit 1
-  fi
-  if [[ "${metrics_scheme}" != "http" && "${metrics_scheme}" != "https" ]]; then
-    echo "${service_name} 的 scheme 只能是 http 或 https"
-    exit 1
-  fi
-  if [[ "${metrics_target}" == *"'"* || "${metrics_target}" == *" "* || -z "${metrics_target}" ]]; then
-    echo "${service_name} 的 target 不能为空，且不能包含空格或单引号"
-    exit 1
-  fi
-  if [[ "${metrics_path}" != /* || "${metrics_path}" == *"'"* || "${metrics_path}" == *" "* ]]; then
-    echo "${service_name} 的 metrics_path 必须以 / 开头，且不能包含空格或单引号"
-    exit 1
-  fi
+  validate_service_row \
+    "${service_name}" \
+    "${metrics_scheme}" \
+    "${metrics_target}" \
+    "${metrics_path}" \
+    "${pd_group:-}" \
+    "${pd_role:-}" \
+    "${pd_instance:-}" \
+    "${backend_url:-}" \
+    "${extra:-}"
 
-  cat >> "${INSTALL_ROOT}/prometheus/conf/prometheus.yml" <<EOF
-  - job_name: '${PROMETHEUS_JOB_PREFIX}-${service_name}'
-    scheme: '${metrics_scheme}'
-    metrics_path: '${metrics_path}'
-    static_configs:
-      - targets: ['${metrics_target}']
-        labels:
-          service: '${service_name}'
-EOF
+  write_prometheus_scrape_job \
+    "${INSTALL_ROOT}/prometheus/conf/prometheus.yml" \
+    "${PROMETHEUS_JOB_PREFIX}" \
+    "${service_name}" \
+    "${metrics_scheme}" \
+    "${metrics_target}" \
+    "${metrics_path}" \
+    "${pd_group:-}" \
+    "${pd_role:-}" \
+    "${pd_instance:-}" \
+    "${backend_url:-}"
   service_count=$((service_count + 1))
 done < "${services_file}"
 

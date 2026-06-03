@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_EXAMPLE="${SCRIPT_DIR}/env.example"
 ENV_FILE="${ENV_FILE:-}"
 
+# shellcheck source=lib/service_config.sh
+source "${SCRIPT_DIR}/lib/service_config.sh"
+
 usage() {
   cat <<'EOF'
 用法:
@@ -15,6 +18,8 @@ usage() {
     --admin-password <Grafana密码> \
     --metrics-service <服务名> <http|https> <指标域名> </metrics> \
     [--metrics-service <服务名> <http|https> <指标域名> </metrics>] \
+    [--pd-service <pd_group> <prefill|decode|router> <服务名> <完整metrics_url>] \
+    [--pd-proxy-service <pd_group> <prefill|decode|router> <服务名> <完整proxy_metrics_url> <backend_url>] \
     [--services-file services.<monitor>.tsv] \
     [--grafana-subpath /grafana] \
     [--admin-user admin] \
@@ -32,6 +37,14 @@ usage() {
     --admin-password 'change-this-password' \
     --metrics-service qwen35 http qwen-metrics.example.com /metrics \
     --metrics-service kimi25 http kimi-metrics.example.com /metrics
+
+  bash quick_deploy.sh \
+    --install-root /opt/vllm-monitor-pd \
+    --env-file env.glm5-pd.local \
+    --service-domain monitor.example.com \
+    --admin-password 'change-this-password' \
+    --pd-service GLM-5-w8a8 prefill glm5-p-79-7100 http://10.119.11.79:7100/metrics \
+    --pd-proxy-service GLM-5-w8a8 decode glm5-d-83-7100 http://10.140.158.149:8133/metrics http://10.119.11.83:7100
 EOF
 }
 
@@ -41,30 +54,6 @@ require_value() {
   if [[ -z "${value}" ]]; then
     echo "缺少参数: ${key}"
     usage
-    exit 1
-  fi
-}
-
-validate_service_line() {
-  local service_name="$1"
-  local metrics_scheme="$2"
-  local metrics_target="$3"
-  local metrics_path="$4"
-
-  if [[ ! "${service_name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
-    echo "服务名只能用字母、数字、下划线、短横线: ${service_name}"
-    exit 1
-  fi
-  if [[ "${metrics_scheme}" != "http" && "${metrics_scheme}" != "https" ]]; then
-    echo "${service_name} 的 scheme 只能是 http 或 https"
-    exit 1
-  fi
-  if [[ -z "${metrics_target}" || "${metrics_target}" == *$'\t'* || "${metrics_target}" == *" "* ]]; then
-    echo "${service_name} 的 target 不能为空，且不能包含空格或 tab"
-    exit 1
-  fi
-  if [[ "${metrics_path}" != /* || "${metrics_path}" == *$'\t'* || "${metrics_path}" == *" "* ]]; then
-    echo "${service_name} 的 metrics_path 必须以 / 开头，且不能包含空格或 tab"
     exit 1
   fi
 }
@@ -109,6 +98,40 @@ write_env_file() {
   done < "${ENV_EXAMPLE}"
 
   mv "${tmp}" "${output}"
+}
+
+add_metrics_service() {
+  local service_name="$1"
+  local metrics_scheme="$2"
+  local metrics_target="$3"
+  local metrics_path="$4"
+
+  validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${metrics_scheme}"$'\t'"${metrics_target}"$'\t'"${metrics_path}")
+}
+
+add_pd_service() {
+  local pd_group="$1"
+  local pd_role="$2"
+  local service_name="$3"
+  local metrics_url="$4"
+
+  parse_metrics_url "--pd-service <metrics_url>" "${metrics_url}"
+  validate_service_row "${service_name}" "${PARSED_SCHEME}" "${PARSED_TARGET}" "${PARSED_PATH}" "${pd_group}" "${pd_role}" "${service_name}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${PARSED_SCHEME}"$'\t'"${PARSED_TARGET}"$'\t'"${PARSED_PATH}"$'\t'"${pd_group}"$'\t'"${pd_role}"$'\t'"${service_name}")
+}
+
+add_pd_proxy_service() {
+  local pd_group="$1"
+  local pd_role="$2"
+  local service_name="$3"
+  local proxy_metrics_url="$4"
+  local backend_url="$5"
+
+  parse_metrics_url "--pd-proxy-service <proxy_metrics_url>" "${proxy_metrics_url}"
+  validate_backend_url "${backend_url}"
+  validate_service_row "${service_name}" "${PARSED_SCHEME}" "${PARSED_TARGET}" "${PARSED_PATH}" "${pd_group}" "${pd_role}" "${service_name}" "${backend_url}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${PARSED_SCHEME}"$'\t'"${PARSED_TARGET}"$'\t'"${PARSED_PATH}"$'\t'"${pd_group}"$'\t'"${pd_role}"$'\t'"${service_name}"$'\t'"${backend_url}")
 }
 
 INSTALL_ROOT=""
@@ -180,9 +203,25 @@ while [[ $# -gt 0 ]]; do
       require_value "--metrics-service <scheme>" "${3:-}"
       require_value "--metrics-service <target>" "${4:-}"
       require_value "--metrics-service <path>" "${5:-}"
-      validate_service_line "$2" "$3" "$4" "$5"
-      SERVICE_LINES+=("$2"$'\t'"$3"$'\t'"$4"$'\t'"$5")
+      add_metrics_service "$2" "$3" "$4" "$5"
       shift 5
+      ;;
+    --pd-service)
+      require_value "--pd-service <pd_group>" "${2:-}"
+      require_value "--pd-service <prefill|decode|router>" "${3:-}"
+      require_value "--pd-service <服务名>" "${4:-}"
+      require_value "--pd-service <metrics_url>" "${5:-}"
+      add_pd_service "$2" "$3" "$4" "$5"
+      shift 5
+      ;;
+    --pd-proxy-service)
+      require_value "--pd-proxy-service <pd_group>" "${2:-}"
+      require_value "--pd-proxy-service <prefill|decode|router>" "${3:-}"
+      require_value "--pd-proxy-service <服务名>" "${4:-}"
+      require_value "--pd-proxy-service <proxy_metrics_url>" "${5:-}"
+      require_value "--pd-proxy-service <backend_url>" "${6:-}"
+      add_pd_proxy_service "$2" "$3" "$4" "$5" "$6"
+      shift 6
       ;;
     -h|--help)
       usage
@@ -202,7 +241,7 @@ require_value "--service-domain" "${SERVICE_DOMAIN}"
 require_value "--admin-password" "${GRAFANA_ADMIN_PASSWORD}"
 
 if [[ "${#SERVICE_LINES[@]}" -eq 0 ]]; then
-  echo "至少传一个 --metrics-service"
+  echo "至少传一个 --metrics-service / --pd-service / --pd-proxy-service"
   usage
   exit 1
 fi
@@ -236,7 +275,7 @@ rm -f "${ENV_FILE}.tmp"
 write_env_file "${ENV_FILE}"
 
 {
-  printf '# service_name\tscheme\ttarget\tmetrics_path\n'
+  printf '# service_name\tscheme\ttarget\tmetrics_path\tpd_group\tpd_role\tpd_instance\tbackend_url\n'
   for service_line in "${SERVICE_LINES[@]}"; do
     printf '%s\n' "${service_line}"
   done

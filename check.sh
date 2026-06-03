@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-}"
 
+# shellcheck source=lib/service_config.sh
+source "${SCRIPT_DIR}/lib/service_config.sh"
+
 if [[ "${1:-}" == "--env-file" ]]; then
   if [[ -z "${2:-}" ]]; then
     echo "--env-file 缺少参数"
@@ -73,14 +76,12 @@ fi
 
 echo
 echo "[METRICS TARGETS]"
-while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path extra; do
+while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
   if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
     continue
   fi
-  if [[ -n "${extra:-}" ]]; then
-    echo "服务列表字段过多，必须是 4 列: ${service_name}"
-    exit 1
-  fi
-  echo "${service_name}: ${metrics_scheme}://${metrics_target}${metrics_path}"
-  curl -fsS "${metrics_scheme}://${metrics_target}${metrics_path}" >/dev/null
+  validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${pd_group:-}" "${pd_role:-}" "${pd_instance:-}" "${backend_url:-}" "${extra:-}"
+  target_url="$(service_target_url "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${backend_url:-}")"
+  echo "${service_name}: ${target_url}"
+  curl -fsS "${target_url}" >/dev/null
 done < "${services_file}"

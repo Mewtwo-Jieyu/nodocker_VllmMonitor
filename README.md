@@ -117,6 +117,33 @@ bash quick_deploy_with_alerts.sh deploy \
 --metrics-service qwen35 http qwen-metrics.example.com /metrics
 ```
 
+## PD 分离服务
+
+PD 分离服务有两种 metrics 接入方式，可以和普通 `--metrics-service` 混用。
+
+direct 模式直接抓 P/D/router 实例自己的 `/metrics`：
+
+```bash
+--pd-service GLM-5-w8a8 prefill glm5-p-79-7100 http://10.119.11.79:7100/metrics \
+--pd-service GLM-5-w8a8 decode glm5-d-83-7100 http://10.119.11.83:7100/metrics
+```
+
+proxy 模式抓代理入口，backend 单独传给 Prometheus 的 `_backend` 参数：
+
+```bash
+--pd-proxy-service GLM-5-w8a8 prefill glm5-p-79-7100 http://10.140.158.149:8133/metrics http://10.119.11.79:7100 \
+--pd-proxy-service GLM-5-w8a8 decode glm5-d-83-7100 http://10.140.158.149:8133/metrics http://10.119.11.83:7100
+```
+
+PD 服务会额外写入这些 Prometheus labels：
+
+| label | 含义 |
+|---|---|
+| `service` | 当前 scrape 实例唯一名，仍可用于旧 vLLM / router 大盘下钻 |
+| `pd_group` | 整个 PD 服务名，例如 `GLM-5-w8a8` |
+| `pd_role` | `prefill` / `decode` / `router` |
+| `pd_instance` | 单个 P/D/router 实例名，默认等于传入的服务名 |
+
 如果飞书出网需要代理，再加：
 
 ```bash

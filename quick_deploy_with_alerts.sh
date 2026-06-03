@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ALERT_DIR="$(cd "${SCRIPT_DIR}/alertmanager_feishu" && pwd)"
 ENV_EXAMPLE="${SCRIPT_DIR}/env.example"
 
+# shellcheck source=lib/service_config.sh
+source "${SCRIPT_DIR}/lib/service_config.sh"
+
 usage() {
   cat <<'EOF'
 用法:
@@ -15,6 +18,15 @@ usage() {
     --service-domain monitor.example.com \
     --admin-password admin \
     --metrics-service kimi25 http kimi-metrics.example.com /metrics
+
+  # 部署 PD 分离服务；direct 和 proxy 可以混用
+  bash quick_deploy_with_alerts.sh deploy \
+    --install-root /opt/vllm-monitor-pd \
+    --env-file env.glm5-pd.local \
+    --service-domain monitor.example.com \
+    --admin-password admin \
+    --pd-service GLM-5-w8a8 prefill glm5-p-79-7100 http://10.119.11.79:7100/metrics \
+    --pd-proxy-service GLM-5-w8a8 decode glm5-d-83-7100 http://10.140.158.149:8133/metrics http://10.119.11.83:7100
 
   # 部署 Prometheus + Grafana + Alertmanager + Feishu relay
   bash quick_deploy_with_alerts.sh deploy \
@@ -37,6 +49,8 @@ deploy 参数:
   --service-domain            当前监控实例平台域名
   --admin-password            Grafana 密码
   --metrics-service           服务名 + http|https + 指标域名 + metrics_path；可重复
+  --pd-service                pd_group + prefill|decode|router + 服务名 + 完整 metrics_url；可重复
+  --pd-proxy-service          pd_group + prefill|decode|router + 服务名 + 完整 proxy_metrics_url + backend_url；可重复
   --service-id                服务名 + 手动显示 ID；可重复，例如 '华为a3 kimi'
   --enable-alerts             true 或 false，默认 false
   --feishu-webhook            启用告警时必填
@@ -91,26 +105,6 @@ derive_env_key() {
     printf '%s\n' "${key%.local}"
   else
     printf '%s\n' "generated"
-  fi
-}
-
-validate_service_line() {
-  local service_name="$1"
-  local metrics_scheme="$2"
-  local metrics_target="$3"
-  local metrics_path="$4"
-
-  if [[ ! "${service_name}" =~ ^[A-Za-z0-9_-]+$ ]]; then
-    die "服务名只能用字母、数字、下划线、短横线: ${service_name}"
-  fi
-  if [[ "${metrics_scheme}" != "http" && "${metrics_scheme}" != "https" ]]; then
-    die "${service_name} 的 scheme 只能是 http 或 https"
-  fi
-  if [[ -z "${metrics_target}" || "${metrics_target}" == *$'\t'* || "${metrics_target}" == *" "* ]]; then
-    die "${service_name} 的 target 不能为空，且不能包含空格或 tab"
-  fi
-  if [[ "${metrics_path}" != /* || "${metrics_path}" == *$'\t'* || "${metrics_path}" == *" "* ]]; then
-    die "${service_name} 的 metrics_path 必须以 / 开头，且不能包含空格或 tab"
   fi
 }
 
@@ -182,7 +176,7 @@ validate_service_ids_match_services() {
   while [[ "${index}" -lt "${#SERVICE_ID_NAMES[@]}" ]]; do
     service_name="${SERVICE_ID_NAMES[${index}]}"
     if ! service_exists "${service_name}"; then
-      die "--service-id 指向了不存在的 --metrics-service: ${service_name}"
+      die "--service-id 指向了不存在的服务: ${service_name}"
     fi
     index=$((index + 1))
   done
@@ -290,11 +284,45 @@ write_monitor_env() {
 
 write_services_file() {
   {
-    printf '# service_name\tscheme\ttarget\tmetrics_path\n'
+    printf '# service_name\tscheme\ttarget\tmetrics_path\tpd_group\tpd_role\tpd_instance\tbackend_url\n'
     for service_line in "${SERVICE_LINES[@]}"; do
       printf '%s\n' "${service_line}"
     done
   } > "${SERVICES_FILE}"
+}
+
+add_metrics_service() {
+  local service_name="$1"
+  local metrics_scheme="$2"
+  local metrics_target="$3"
+  local metrics_path="$4"
+
+  validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${metrics_scheme}"$'\t'"${metrics_target}"$'\t'"${metrics_path}")
+}
+
+add_pd_service() {
+  local pd_group="$1"
+  local pd_role="$2"
+  local service_name="$3"
+  local metrics_url="$4"
+
+  parse_metrics_url "--pd-service <metrics_url>" "${metrics_url}"
+  validate_service_row "${service_name}" "${PARSED_SCHEME}" "${PARSED_TARGET}" "${PARSED_PATH}" "${pd_group}" "${pd_role}" "${service_name}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${PARSED_SCHEME}"$'\t'"${PARSED_TARGET}"$'\t'"${PARSED_PATH}"$'\t'"${pd_group}"$'\t'"${pd_role}"$'\t'"${service_name}")
+}
+
+add_pd_proxy_service() {
+  local pd_group="$1"
+  local pd_role="$2"
+  local service_name="$3"
+  local proxy_metrics_url="$4"
+  local backend_url="$5"
+
+  parse_metrics_url "--pd-proxy-service <proxy_metrics_url>" "${proxy_metrics_url}"
+  validate_backend_url "${backend_url}"
+  validate_service_row "${service_name}" "${PARSED_SCHEME}" "${PARSED_TARGET}" "${PARSED_PATH}" "${pd_group}" "${pd_role}" "${service_name}" "${backend_url}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${PARSED_SCHEME}"$'\t'"${PARSED_TARGET}"$'\t'"${PARSED_PATH}"$'\t'"${pd_group}"$'\t'"${pd_role}"$'\t'"${service_name}"$'\t'"${backend_url}")
 }
 
 write_service_ids_file() {
@@ -554,7 +582,7 @@ deploy_action() {
 
   if [[ "${#SERVICE_LINES[@]}" -eq 0 ]]; then
     usage
-    die "至少传一个 --metrics-service"
+    die "至少传一个 --metrics-service / --pd-service / --pd-proxy-service"
   fi
   validate_service_ids_match_services
 
@@ -849,7 +877,7 @@ resolve_services_file_from_env() {
 }
 
 check_monitor_stack() {
-  local service pid_file services_file login_path grafana_headers service_name metrics_scheme metrics_target metrics_path extra target_url target_failed
+  local service pid_file services_file login_path grafana_headers service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra target_url target_failed
 
   echo "[PID]"
   for service in prometheus grafana; do
@@ -877,14 +905,12 @@ check_monitor_stack() {
   echo
   echo "[METRICS TARGETS]"
   target_failed=false
-  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path extra; do
+  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
     if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
       continue
     fi
-    if [[ -n "${extra:-}" ]]; then
-      die "服务列表字段过多，必须是 4 列: ${service_name}"
-    fi
-    target_url="${metrics_scheme}://${metrics_target}${metrics_path}"
+    validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${pd_group:-}" "${pd_role:-}" "${pd_instance:-}" "${backend_url:-}" "${extra:-}"
+    target_url="$(service_target_url "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${backend_url:-}")"
     if local_curl "${target_url}" >/dev/null 2>&1; then
       echo "${service_name}: healthy ${target_url}"
     else
@@ -920,20 +946,18 @@ check_prometheus_alert_rules() {
 }
 
 check_prometheus_services_up() {
-  local services_file up_json service_name metrics_scheme metrics_target metrics_path extra
+  local services_file up_json service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra
 
   services_file="$(resolve_services_file_from_env)"
   echo
   echo "[PROMETHEUS SERVICE LABELS]"
   up_json="$(local_curl "http://127.0.0.1:${PROMETHEUS_PORT}/api/v1/query?query=up")"
 
-  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path extra; do
+  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
     if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
       continue
     fi
-    if [[ -n "${extra:-}" ]]; then
-      die "服务列表字段过多，必须是 4 列: ${service_name}"
-    fi
+    validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${pd_group:-}" "${pd_role:-}" "${pd_instance:-}" "${backend_url:-}" "${extra:-}"
     if ! printf '%s\n' "${up_json}" | grep -q "\"service\":\"${service_name}\""; then
       die "Prometheus up 查询未看到 service=${service_name}"
     fi
@@ -1066,9 +1090,23 @@ case "${ACTION}" in
           require_value "--metrics-service <scheme>" "${3:-}"
           require_value "--metrics-service <target>" "${4:-}"
           require_value "--metrics-service <path>" "${5:-}"
-          validate_service_line "$2" "$3" "$4" "$5"
-          SERVICE_LINES+=("$2"$'\t'"$3"$'\t'"$4"$'\t'"$5")
+          add_metrics_service "$2" "$3" "$4" "$5"
           shift 5 ;;
+        --pd-service)
+          require_value "--pd-service <pd_group>" "${2:-}"
+          require_value "--pd-service <prefill|decode|router>" "${3:-}"
+          require_value "--pd-service <服务名>" "${4:-}"
+          require_value "--pd-service <metrics_url>" "${5:-}"
+          add_pd_service "$2" "$3" "$4" "$5"
+          shift 5 ;;
+        --pd-proxy-service)
+          require_value "--pd-proxy-service <pd_group>" "${2:-}"
+          require_value "--pd-proxy-service <prefill|decode|router>" "${3:-}"
+          require_value "--pd-proxy-service <服务名>" "${4:-}"
+          require_value "--pd-proxy-service <proxy_metrics_url>" "${5:-}"
+          require_value "--pd-proxy-service <backend_url>" "${6:-}"
+          add_pd_proxy_service "$2" "$3" "$4" "$5" "$6"
+          shift 6 ;;
         --service-id)
           require_value "--service-id <服务名>" "${2:-}"
           require_value "--service-id <显示ID>" "${3:-}"
