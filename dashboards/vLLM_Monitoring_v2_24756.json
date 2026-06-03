@@ -1385,45 +1385,13 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Daily input and output token totals over the last 7 days for the selected model and service.",
+      "description": "Calendar-day token buckets. D-6 through D-1 are complete local calendar days ending at today 00:00; Today is from today 00:00 to now.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.7,
-            "drawStyle": "bars",
-            "fillOpacity": 75,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -1439,8 +1407,8 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "Input"
+              "id": "byRegexp",
+              "options": ".*Input$"
             },
             "properties": [
               {
@@ -1454,8 +1422,8 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "Output"
+              "id": "byRegexp",
+              "options": ".*Output$"
             },
             "properties": [
               {
@@ -1477,19 +1445,22 @@
       },
       "id": 307,
       "options": {
-        "legend": {
+        "displayMode": "gradient",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
       },
       "pluginVersion": "12.3.0",
       "targets": [
@@ -1498,9 +1469,10 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d]))",
-          "interval": "1d",
-          "legendFormat": "Input",
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 5d))",
+          "instant": true,
+          "legendFormat": "D-6 Input",
+          "range": false,
           "refId": "A"
         },
         {
@@ -1508,15 +1480,149 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d]))",
-          "interval": "1d",
-          "legendFormat": "Output",
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 5d))",
+          "instant": true,
+          "legendFormat": "D-6 Output",
+          "range": false,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 4d))",
+          "instant": true,
+          "legendFormat": "D-5 Input",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 4d))",
+          "instant": true,
+          "legendFormat": "D-5 Output",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 3d))",
+          "instant": true,
+          "legendFormat": "D-4 Input",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 3d))",
+          "instant": true,
+          "legendFormat": "D-4 Output",
+          "range": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 2d))",
+          "instant": true,
+          "legendFormat": "D-3 Input",
+          "range": false,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 2d))",
+          "instant": true,
+          "legendFormat": "D-3 Output",
+          "range": false,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 1d))",
+          "instant": true,
+          "legendFormat": "D-2 Input",
+          "range": false,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds} offset 1d))",
+          "instant": true,
+          "legendFormat": "D-2 Output",
+          "range": false,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds}))",
+          "instant": true,
+          "legendFormat": "D-1 Input",
+          "range": false,
+          "refId": "K"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[1d] @ ${__from:date:seconds}))",
+          "instant": true,
+          "legendFormat": "D-1 Output",
+          "range": false,
+          "refId": "L"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:prompt_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[${__range_s}s]))",
+          "instant": true,
+          "legendFormat": "Today Input",
+          "range": false,
+          "refId": "M"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(increase(vllm:generation_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[${__range_s}s]))",
+          "instant": true,
+          "legendFormat": "Today Output",
+          "range": false,
+          "refId": "N"
         }
       ],
-      "timeFrom": "7d",
-      "title": "7天 Input/Output Token 统计",
-      "type": "timeseries"
+      "timeFrom": "now/d",
+      "title": "7天 Input/Output Token 统计（自然日）",
+      "type": "bargauge",
+      "hideTimeOverride": true
     },
     {
       "collapsed": false,
