@@ -1411,7 +1411,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(up, service)",
+        "definition": "label_values(vllm_router_active_workers, service)",
         "hide": 0,
         "includeAll": true,
         "label": "service",
@@ -1419,7 +1419,7 @@
         "name": "service",
         "options": [],
         "query": {
-          "query": "label_values(up, service)",
+          "query": "label_values(vllm_router_active_workers, service)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,

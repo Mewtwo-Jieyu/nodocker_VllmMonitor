@@ -2621,7 +2621,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(up, service)",
+        "definition": "label_values(vllm:num_requests_running, service)",
         "hide": 0,
         "includeAll": true,
         "label": "service",
@@ -2629,7 +2629,7 @@
         "name": "service",
         "options": [],
         "query": {
-          "query": "label_values(up, service)",
+          "query": "label_values(vllm:num_requests_running, service)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
