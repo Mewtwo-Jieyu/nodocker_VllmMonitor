@@ -603,12 +603,48 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
+          "expr": "histogram_quantile(0.5, sum by(pd_role, le) (rate(vllm:time_to_first_token_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "{{pd_role}} p50",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.9, sum by(pd_role, le) (rate(vllm:time_to_first_token_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "{{pd_role}} p90",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "histogram_quantile(0.95, sum by(pd_role, le) (rate(vllm:time_to_first_token_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])))",
           "legendFormat": "{{pd_role}} p95",
-          "refId": "A"
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.99, sum by(pd_role, le) (rate(vllm:time_to_first_token_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "{{pd_role}} p99",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by(pd_role) (rate(vllm:time_to_first_token_seconds_sum{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])) / clamp_min(sum by(pd_role) (rate(vllm:time_to_first_token_seconds_count{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "{{pd_role}} avg",
+          "refId": "E"
         }
       ],
-      "title": "TTFT p95 by Role",
+      "title": "TTFT Latency by Role",
       "type": "timeseries"
     },
     {
@@ -696,12 +732,48 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.95, sum by(pd_role, le) (rate(vllm:inter_token_latency_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",model_name=~\"$model_name\"}[$__rate_interval])))",
-          "legendFormat": "{{pd_role}} p95",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",pd_role=\"decode\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "decode p50",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",pd_role=\"decode\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "decode p90",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",pd_role=\"decode\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "decode p95",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:inter_token_latency_seconds_bucket{pd_group=~\"$pd_group\",pd_group!=\"\",pd_role=\"decode\",model_name=~\"$model_name\"}[$__rate_interval])))",
+          "legendFormat": "decode p99",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(vllm:inter_token_latency_seconds_sum{pd_group=~\"$pd_group\",pd_group!=\"\",pd_role=\"decode\",model_name=~\"$model_name\"}[$__rate_interval])) / clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{pd_group=~\"$pd_group\",pd_group!=\"\",pd_role=\"decode\",model_name=~\"$model_name\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "decode avg",
+          "refId": "E"
         }
       ],
-      "title": "ITL p95 by Role",
+      "title": "Decode ITL Latency",
       "type": "timeseries"
     },
     {
