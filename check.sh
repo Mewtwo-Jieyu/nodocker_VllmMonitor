@@ -76,12 +76,13 @@ fi
 
 echo
 echo "[METRICS TARGETS]"
-while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
+while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path field5 field6 field7 field8 extra; do
   if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
     continue
   fi
-  validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${pd_group:-}" "${pd_role:-}" "${pd_instance:-}" "${backend_url:-}" "${extra:-}"
-  target_url="$(service_target_url "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${backend_url:-}")"
+  normalize_service_metadata "${field5:-}" "${field6:-}" "${field7:-}" "${field8:-}" "${extra:-}"
+  validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${ROW_PD_GROUP}" "${ROW_PD_ROLE}" "${ROW_PD_INSTANCE}" "${ROW_BACKEND_URL}" "${ROW_EXTRA}"
+  target_url="$(service_target_url "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${ROW_BACKEND_URL}")"
   echo "${service_name}: ${target_url}"
   curl -fsS "${target_url}" >/dev/null
 done < "${services_file}"

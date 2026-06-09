@@ -106,20 +106,21 @@ scrape_configs:
 EOF
 
 service_count=0
-while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
+while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path field5 field6 field7 field8 extra; do
   if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
     continue
   fi
+  normalize_service_metadata "${field5:-}" "${field6:-}" "${field7:-}" "${field8:-}" "${extra:-}"
   validate_service_row \
     "${service_name}" \
     "${metrics_scheme}" \
     "${metrics_target}" \
     "${metrics_path}" \
-    "${pd_group:-}" \
-    "${pd_role:-}" \
-    "${pd_instance:-}" \
-    "${backend_url:-}" \
-    "${extra:-}"
+    "${ROW_PD_GROUP}" \
+    "${ROW_PD_ROLE}" \
+    "${ROW_PD_INSTANCE}" \
+    "${ROW_BACKEND_URL}" \
+    "${ROW_EXTRA}"
 
   write_prometheus_scrape_job \
     "${INSTALL_ROOT}/prometheus/conf/prometheus.yml" \
@@ -128,10 +129,10 @@ while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path 
     "${metrics_scheme}" \
     "${metrics_target}" \
     "${metrics_path}" \
-    "${pd_group:-}" \
-    "${pd_role:-}" \
-    "${pd_instance:-}" \
-    "${backend_url:-}"
+    "${ROW_PD_GROUP}" \
+    "${ROW_PD_ROLE}" \
+    "${ROW_PD_INSTANCE}" \
+    "${ROW_BACKEND_URL}"
   service_count=$((service_count + 1))
 done < "${services_file}"
 

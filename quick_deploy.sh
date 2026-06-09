@@ -18,6 +18,7 @@ usage() {
     --admin-password <Grafana密码> \
     --metrics-service <服务名> <http|https> <指标域名> </metrics> \
     [--metrics-service <服务名> <http|https> <指标域名> </metrics>] \
+    [--metrics-proxy-service <服务名> <完整proxy_metrics_url> <backend_url>] \
     [--pd-service <pd_group> <prefill|decode|router> <服务名> <完整metrics_url>] \
     [--pd-proxy-service <pd_group> <prefill|decode|router> <服务名> <完整proxy_metrics_url> <backend_url>] \
     [--services-file services.<monitor>.tsv] \
@@ -37,6 +38,13 @@ usage() {
     --admin-password 'change-this-password' \
     --metrics-service qwen35 http qwen-metrics.example.com /metrics \
     --metrics-service kimi25 http kimi-metrics.example.com /metrics
+
+  bash quick_deploy.sh \
+    --install-root /opt/vllm-monitor-proxy \
+    --env-file env.proxy.local \
+    --service-domain monitor.example.com \
+    --admin-password 'change-this-password' \
+    --metrics-proxy-service qwen3-opd http://10.140.158.149:8133/metrics http://10.119.1.215:8000
 
   bash quick_deploy.sh \
     --install-root /opt/vllm-monitor-pd \
@@ -108,6 +116,17 @@ add_metrics_service() {
 
   validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}"
   SERVICE_LINES+=("${service_name}"$'\t'"${metrics_scheme}"$'\t'"${metrics_target}"$'\t'"${metrics_path}")
+}
+
+add_metrics_proxy_service() {
+  local service_name="$1"
+  local proxy_metrics_url="$2"
+  local backend_url="$3"
+
+  parse_metrics_url "--metrics-proxy-service <proxy_metrics_url>" "${proxy_metrics_url}"
+  validate_backend_url "${backend_url}"
+  validate_service_row "${service_name}" "${PARSED_SCHEME}" "${PARSED_TARGET}" "${PARSED_PATH}" "" "" "" "${backend_url}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${PARSED_SCHEME}"$'\t'"${PARSED_TARGET}"$'\t'"${PARSED_PATH}"$'\t'"${backend_url}")
 }
 
 add_pd_service() {
@@ -206,6 +225,13 @@ while [[ $# -gt 0 ]]; do
       add_metrics_service "$2" "$3" "$4" "$5"
       shift 5
       ;;
+    --metrics-proxy-service)
+      require_value "--metrics-proxy-service <服务名>" "${2:-}"
+      require_value "--metrics-proxy-service <proxy_metrics_url>" "${3:-}"
+      require_value "--metrics-proxy-service <backend_url>" "${4:-}"
+      add_metrics_proxy_service "$2" "$3" "$4"
+      shift 4
+      ;;
     --pd-service)
       require_value "--pd-service <pd_group>" "${2:-}"
       require_value "--pd-service <prefill|decode|router>" "${3:-}"
@@ -241,7 +267,7 @@ require_value "--service-domain" "${SERVICE_DOMAIN}"
 require_value "--admin-password" "${GRAFANA_ADMIN_PASSWORD}"
 
 if [[ "${#SERVICE_LINES[@]}" -eq 0 ]]; then
-  echo "至少传一个 --metrics-service / --pd-service / --pd-proxy-service"
+  echo "至少传一个 --metrics-service / --metrics-proxy-service / --pd-service / --pd-proxy-service"
   usage
   exit 1
 fi

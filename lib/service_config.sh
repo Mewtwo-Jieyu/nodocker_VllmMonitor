@@ -94,12 +94,17 @@ validate_service_row() {
   local extra="${9:-}"
 
   if [[ -n "${extra}" ]]; then
-    service_config_die "服务列表字段过多，必须是 4、7 或 8 列: ${service_name}"
+    service_config_die "服务列表字段过多，必须是 4、5、7 或 8 列: ${service_name}"
   fi
 
   validate_service_target "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}"
 
   if [[ -z "${pd_group}${pd_role}${pd_instance}${backend_url}" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${pd_group}${pd_role}${pd_instance}" ]]; then
+    validate_backend_url "${backend_url}"
     return 0
   fi
 
@@ -118,6 +123,27 @@ validate_service_row() {
 
   if [[ -n "${backend_url}" ]]; then
     validate_backend_url "${backend_url}"
+  fi
+}
+
+normalize_service_metadata() {
+  local field5="${1:-}"
+  local field6="${2:-}"
+  local field7="${3:-}"
+  local field8="${4:-}"
+  local extra="${5:-}"
+
+  ROW_PD_GROUP="${field5}"
+  ROW_PD_ROLE="${field6}"
+  ROW_PD_INSTANCE="${field7}"
+  ROW_BACKEND_URL="${field8}"
+  ROW_EXTRA="${extra}"
+
+  if [[ -n "${field5}" && -z "${field6}${field7}${field8}" && "${field5}" =~ ^https?:// ]]; then
+    ROW_PD_GROUP=""
+    ROW_PD_ROLE=""
+    ROW_PD_INSTANCE=""
+    ROW_BACKEND_URL="${field5}"
   fi
 }
 

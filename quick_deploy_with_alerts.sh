@@ -19,6 +19,14 @@ usage() {
     --admin-password admin \
     --metrics-service kimi25 http kimi-metrics.example.com /metrics
 
+  # 部署普通服务；metrics 经代理入口访问 backend
+  bash quick_deploy_with_alerts.sh deploy \
+    --install-root /opt/vllm-monitor-proxy \
+    --env-file env.proxy.local \
+    --service-domain monitor.example.com \
+    --admin-password admin \
+    --metrics-proxy-service qwen3-opd http://10.140.158.149:8133/metrics http://10.119.1.215:8000
+
   # 部署 PD 分离服务；direct 和 proxy 可以混用
   bash quick_deploy_with_alerts.sh deploy \
     --install-root /opt/vllm-monitor-pd \
@@ -49,6 +57,7 @@ deploy 参数:
   --service-domain            当前监控实例平台域名
   --admin-password            Grafana 密码
   --metrics-service           服务名 + http|https + 指标域名 + metrics_path；可重复
+  --metrics-proxy-service     服务名 + 完整 proxy_metrics_url + backend_url；可重复
   --pd-service                pd_group + prefill|decode|router + 服务名 + 完整 metrics_url；可重复
   --pd-proxy-service          pd_group + prefill|decode|router + 服务名 + 完整 proxy_metrics_url + backend_url；可重复
   --service-id                服务名 + 手动显示 ID；可重复，例如 '华为a3 kimi'
@@ -299,6 +308,17 @@ add_metrics_service() {
 
   validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}"
   SERVICE_LINES+=("${service_name}"$'\t'"${metrics_scheme}"$'\t'"${metrics_target}"$'\t'"${metrics_path}")
+}
+
+add_metrics_proxy_service() {
+  local service_name="$1"
+  local proxy_metrics_url="$2"
+  local backend_url="$3"
+
+  parse_metrics_url "--metrics-proxy-service <proxy_metrics_url>" "${proxy_metrics_url}"
+  validate_backend_url "${backend_url}"
+  validate_service_row "${service_name}" "${PARSED_SCHEME}" "${PARSED_TARGET}" "${PARSED_PATH}" "" "" "" "${backend_url}"
+  SERVICE_LINES+=("${service_name}"$'\t'"${PARSED_SCHEME}"$'\t'"${PARSED_TARGET}"$'\t'"${PARSED_PATH}"$'\t'"${backend_url}")
 }
 
 add_pd_service() {
@@ -582,7 +602,7 @@ deploy_action() {
 
   if [[ "${#SERVICE_LINES[@]}" -eq 0 ]]; then
     usage
-    die "至少传一个 --metrics-service / --pd-service / --pd-proxy-service"
+    die "至少传一个 --metrics-service / --metrics-proxy-service / --pd-service / --pd-proxy-service"
   fi
   validate_service_ids_match_services
 
@@ -877,7 +897,7 @@ resolve_services_file_from_env() {
 }
 
 check_monitor_stack() {
-  local service pid_file services_file login_path grafana_headers service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra target_url target_failed
+  local service pid_file services_file login_path grafana_headers service_name metrics_scheme metrics_target metrics_path field5 field6 field7 field8 extra target_url target_failed
 
   echo "[PID]"
   for service in prometheus grafana; do
@@ -905,12 +925,13 @@ check_monitor_stack() {
   echo
   echo "[METRICS TARGETS]"
   target_failed=false
-  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
+  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path field5 field6 field7 field8 extra; do
     if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
       continue
     fi
-    validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${pd_group:-}" "${pd_role:-}" "${pd_instance:-}" "${backend_url:-}" "${extra:-}"
-    target_url="$(service_target_url "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${backend_url:-}")"
+    normalize_service_metadata "${field5:-}" "${field6:-}" "${field7:-}" "${field8:-}" "${extra:-}"
+    validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${ROW_PD_GROUP}" "${ROW_PD_ROLE}" "${ROW_PD_INSTANCE}" "${ROW_BACKEND_URL}" "${ROW_EXTRA}"
+    target_url="$(service_target_url "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${ROW_BACKEND_URL}")"
     if local_curl "${target_url}" >/dev/null 2>&1; then
       echo "${service_name}: healthy ${target_url}"
     else
@@ -946,18 +967,19 @@ check_prometheus_alert_rules() {
 }
 
 check_prometheus_services_up() {
-  local services_file up_json service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra
+  local services_file up_json service_name metrics_scheme metrics_target metrics_path field5 field6 field7 field8 extra
 
   services_file="$(resolve_services_file_from_env)"
   echo
   echo "[PROMETHEUS SERVICE LABELS]"
   up_json="$(local_curl "http://127.0.0.1:${PROMETHEUS_PORT}/api/v1/query?query=up")"
 
-  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path pd_group pd_role pd_instance backend_url extra; do
+  while IFS=$'\t' read -r service_name metrics_scheme metrics_target metrics_path field5 field6 field7 field8 extra; do
     if [[ -z "${service_name}" || "${service_name}" == \#* ]]; then
       continue
     fi
-    validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${pd_group:-}" "${pd_role:-}" "${pd_instance:-}" "${backend_url:-}" "${extra:-}"
+    normalize_service_metadata "${field5:-}" "${field6:-}" "${field7:-}" "${field8:-}" "${extra:-}"
+    validate_service_row "${service_name}" "${metrics_scheme}" "${metrics_target}" "${metrics_path}" "${ROW_PD_GROUP}" "${ROW_PD_ROLE}" "${ROW_PD_INSTANCE}" "${ROW_BACKEND_URL}" "${ROW_EXTRA}"
     if ! printf '%s\n' "${up_json}" | grep -q "\"service\":\"${service_name}\""; then
       die "Prometheus up 查询未看到 service=${service_name}"
     fi
@@ -1092,6 +1114,12 @@ case "${ACTION}" in
           require_value "--metrics-service <path>" "${5:-}"
           add_metrics_service "$2" "$3" "$4" "$5"
           shift 5 ;;
+        --metrics-proxy-service)
+          require_value "--metrics-proxy-service <服务名>" "${2:-}"
+          require_value "--metrics-proxy-service <proxy_metrics_url>" "${3:-}"
+          require_value "--metrics-proxy-service <backend_url>" "${4:-}"
+          add_metrics_proxy_service "$2" "$3" "$4"
+          shift 4 ;;
         --pd-service)
           require_value "--pd-service <pd_group>" "${2:-}"
           require_value "--pd-service <prefill|decode|router>" "${3:-}"

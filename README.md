@@ -117,6 +117,12 @@ bash quick_deploy_with_alerts.sh deploy \
 --metrics-service qwen35 http qwen-metrics.example.com /metrics
 ```
 
+如果普通服务的 metrics 需要经代理访问 backend，用 `--metrics-proxy-service`，不要把 `_backend` 拼进 metrics path：
+
+```bash
+--metrics-proxy-service qwen3-opd http://10.140.158.149:8133/metrics http://10.119.1.215:8000
+```
+
 ## PD 分离服务
 
 PD 分离服务有两种 metrics 接入方式，可以和普通 `--metrics-service` 混用。

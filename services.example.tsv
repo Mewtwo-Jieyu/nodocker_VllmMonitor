@@ -1,6 +1,8 @@
 # service_name	scheme	target	metrics_path	pd_group	pd_role	pd_instance	backend_url
 qwen35	http	qwen-metrics.example.com	/metrics
 kimi25	http	kimi-metrics.example.com	/metrics
+# Non-PD proxy: service_name/scheme/proxy_target/proxy_metrics_path/backend_url
+qwen3-opd	http	10.140.158.149:8133	/metrics	http://10.119.1.215:8000
 # PD direct: service_name/scheme/target/metrics_path/pd_group/pd_role/pd_instance
 glm5-p-79-7100	http	10.119.11.79:7100	/metrics	GLM-5-w8a8	prefill	glm5-p-79-7100
 # PD proxy: service_name/scheme/proxy_target/proxy_metrics_path/pd_group/pd_role/pd_instance/backend_url
