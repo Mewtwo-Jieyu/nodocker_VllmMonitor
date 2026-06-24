@@ -61,6 +61,7 @@ deploy 参数:
   --pd-service                pd_group + prefill|decode|router + 服务名 + 完整 metrics_url；可重复
   --pd-proxy-service          pd_group + prefill|decode|router + 服务名 + 完整 proxy_metrics_url + backend_url；可重复
   --service-id                服务名 + 手动显示 ID；可重复，例如 '华为a3 kimi'
+  --target-down-for           服务名 + TargetDown 判定时间；可重复，例如 qwen3 5m
   --enable-alerts             true 或 false，默认 false
   --feishu-webhook            启用告警时必填
   --proxy-setup-url           可选；Feishu 出网需要代理时填写
@@ -146,6 +147,14 @@ validate_service_id() {
   fi
 }
 
+validate_alert_duration() {
+  local key="$1"
+  local value="$2"
+  if [[ ! "${value}" =~ ^[1-9][0-9]*(ms|s|m|h|d|w|y)$ ]]; then
+    die "${key} 必须是 Prometheus 时间格式，例如 30s、2m、5m、1h: ${value}"
+  fi
+}
+
 service_exists() {
   local wanted="$1"
   local service_line service_name rest
@@ -178,6 +187,25 @@ add_service_id() {
   SERVICE_ID_VALUES+=("${service_id}")
 }
 
+add_target_down_for() {
+  local service_name="$1"
+  local duration="$2"
+  local index
+
+  validate_simple_name "--target-down-for <服务名>" "${service_name}"
+  validate_alert_duration "--target-down-for ${service_name}" "${duration}"
+  index=0
+  while [[ "${index}" -lt "${#TARGET_DOWN_FOR_NAMES[@]}" ]]; do
+    if [[ "${TARGET_DOWN_FOR_NAMES[${index}]}" == "${service_name}" ]]; then
+      die "--target-down-for 重复: ${service_name}"
+    fi
+    index=$((index + 1))
+  done
+
+  TARGET_DOWN_FOR_NAMES+=("${service_name}")
+  TARGET_DOWN_FOR_VALUES+=("${duration}")
+}
+
 validate_service_ids_match_services() {
   local index service_name
 
@@ -186,6 +214,19 @@ validate_service_ids_match_services() {
     service_name="${SERVICE_ID_NAMES[${index}]}"
     if ! service_exists "${service_name}"; then
       die "--service-id 指向了不存在的服务: ${service_name}"
+    fi
+    index=$((index + 1))
+  done
+}
+
+validate_target_down_for_match_services() {
+  local index service_name
+
+  index=0
+  while [[ "${index}" -lt "${#TARGET_DOWN_FOR_NAMES[@]}" ]]; do
+    service_name="${TARGET_DOWN_FOR_NAMES[${index}]}"
+    if ! service_exists "${service_name}"; then
+      die "--target-down-for 指向了不存在的服务: ${service_name}"
     fi
     index=$((index + 1))
   done
@@ -369,6 +410,61 @@ append_alert_env_service_ids_file() {
   printf '%s=%q\n' FEISHU_SERVICE_IDS_FILE "${SERVICE_IDS_FILE}" >> "${ALERT_ENV_FILE}"
 }
 
+target_down_exclusion_matcher() {
+  local index regex service_name
+
+  if [[ "${#TARGET_DOWN_FOR_NAMES[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  regex=""
+  index=0
+  while [[ "${index}" -lt "${#TARGET_DOWN_FOR_NAMES[@]}" ]]; do
+    service_name="${TARGET_DOWN_FOR_NAMES[${index}]}"
+    if [[ -n "${regex}" ]]; then
+      regex="${regex}|"
+    fi
+    regex="${regex}${service_name}"
+    index=$((index + 1))
+  done
+
+  printf ',service!~"^(%s)$"' "${regex}"
+}
+
+write_target_down_alert_rules() {
+  local matcher index service_name duration
+
+  matcher="$(target_down_exclusion_matcher)"
+  cat <<EOF
+  - alert: VLLMTargetDown
+    expr: up{job=~"${PROMETHEUS_JOB_PREFIX}-.*"${matcher}} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM metrics 抓取失败"
+      description: "ALERT 监控机抓取服务 {{ \$labels.service }} 的 /metrics 失败超过 2 分钟，不等同于 /v1/chat/completions 必然不可用"
+EOF
+
+  index=0
+  while [[ "${index}" -lt "${#TARGET_DOWN_FOR_NAMES[@]}" ]]; do
+    service_name="${TARGET_DOWN_FOR_NAMES[${index}]}"
+    duration="${TARGET_DOWN_FOR_VALUES[${index}]}"
+    cat <<EOF
+
+  - alert: VLLMTargetDown
+    expr: up{job=~"${PROMETHEUS_JOB_PREFIX}-.*",service="${service_name}"} == 0
+    for: ${duration}
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM metrics 抓取失败"
+      description: "ALERT 监控机抓取服务 {{ \$labels.service }} 的 /metrics 失败超过 ${duration}，不等同于 /v1/chat/completions 必然不可用"
+EOF
+    index=$((index + 1))
+  done
+}
+
 write_vllm_rules_file() {
   cat > "${RULES_FILE}" <<EOF
 groups:
@@ -455,14 +551,9 @@ groups:
 
 - name: simucraft-vllm-alerts
   rules:
-  - alert: VLLMTargetDown
-    expr: up{job=~"${PROMETHEUS_JOB_PREFIX}-.*"} == 0
-    for: 2m
-    labels:
-      severity: critical
-    annotations:
-      summary: "vLLM metrics 抓取失败"
-      description: "ALERT 监控机抓取服务 {{ \$labels.service }} 的 /metrics 失败超过 2 分钟，不等同于 /v1/chat/completions 必然不可用"
+EOF
+  write_target_down_alert_rules >> "${RULES_FILE}"
+  cat >> "${RULES_FILE}" <<EOF
 
   - alert: VLLMHighErrorRateWarning
     expr: simucraft:vllm_request_error_rate:ratio5m > 0.01
@@ -605,6 +696,7 @@ deploy_action() {
     die "至少传一个 --metrics-service / --metrics-proxy-service / --pd-service / --pd-proxy-service"
   fi
   validate_service_ids_match_services
+  validate_target_down_for_match_services
 
   ENV_FILE="$(resolve_env_file "${ENV_FILE}")"
   ENV_DIR="$(cd "$(dirname "${ENV_FILE}")" && pwd)"
@@ -1066,6 +1158,8 @@ PROMETHEUS_RULES_FILE=""
 SERVICE_LINES=()
 SERVICE_ID_NAMES=()
 SERVICE_ID_VALUES=()
+TARGET_DOWN_FOR_NAMES=()
+TARGET_DOWN_FOR_VALUES=()
 SEND_TEST=false
 TEST_ROUTE=default
 
@@ -1139,6 +1233,11 @@ case "${ACTION}" in
           require_value "--service-id <服务名>" "${2:-}"
           require_value "--service-id <显示ID>" "${3:-}"
           add_service_id "$2" "$3"
+          shift 3 ;;
+        --target-down-for)
+          require_value "--target-down-for <服务名>" "${2:-}"
+          require_value "--target-down-for <duration>" "${3:-}"
+          add_target_down_for "$2" "$3"
           shift 3 ;;
         -h|--help)
           usage; exit 0 ;;
