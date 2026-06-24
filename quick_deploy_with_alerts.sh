@@ -441,6 +441,7 @@ write_target_down_alert_rules() {
     for: 2m
     labels:
       severity: critical
+      target_down_scope: default
     annotations:
       summary: "vLLM metrics 抓取失败"
       description: "ALERT 监控机抓取服务 {{ \$labels.service }} 的 /metrics 失败超过 2 分钟，不等同于 /v1/chat/completions 必然不可用"
@@ -457,6 +458,7 @@ EOF
     for: ${duration}
     labels:
       severity: critical
+      target_down_scope: ${service_name}
     annotations:
       summary: "vLLM metrics 抓取失败"
       description: "ALERT 监控机抓取服务 {{ \$labels.service }} 的 /metrics 失败超过 ${duration}，不等同于 /v1/chat/completions 必然不可用"
