@@ -25,7 +25,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1459,6 +1458,197 @@
       ],
       "title": "Max Generation Token in Sequence Group",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Time Per Output Token in seconds. 展示三种计算方式：1) 请求级 TPOT Histogram（推荐），请求等权平均；2) 基于 DecodeTime / GenTokens 推导，每个 token 等权平均；3) 基于 ITL / (AcceptedDraft + BaseToken) 推导（需 MTP 开启）。三者应在稳定状态下收敛于同一值。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]))) ",
+          "fullMetaSearch": false,
+          "includeNullMetadata": false,
+          "instant": false,
+          "legendFormat": "P99 (per request)",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]))) ",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": false,
+          "instant": false,
+          "legendFormat": "P95 (per request)",
+          "range": true,
+          "refId": "B",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.9, sum by(le) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]))) ",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": false,
+          "instant": false,
+          "legendFormat": "P90 (per request)",
+          "range": true,
+          "refId": "C",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5, sum by(le) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]))) ",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": false,
+          "instant": false,
+          "legendFormat": "P50 (per request)",
+          "range": true,
+          "refId": "D",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(vllm:request_time_per_output_token_seconds_sum{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval])\n/\nrate(vllm:request_time_per_output_token_seconds_count{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]) ",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Mean (per request)",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(vllm:request_decode_time_seconds_sum{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval])\n/\nrate(vllm:request_generation_tokens_sum{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]) ",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Derived: DecodeTime / GenTokens",
+          "range": true,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(vllm:inter_token_latency_seconds_sum{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval])\n/\n(rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval]) + rate(vllm:spec_decode_num_drafts_total{model_name=~\"$model_name\",service=~\"$service\"}[$__rate_interval])) ",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Derived: ITL / (AcceptedDraft + BaseToken)",
+          "range": true,
+          "refId": "G"
+        }
+      ],
+      "title": "TPOT (Time Per Output Token)",
+      "type": "timeseries"
     }
   ],
   "refresh": "",
@@ -1551,6 +1741,5 @@
   "timezone": "",
   "title": "vLLM",
   "uid": "b281712d-8bff-41ef-9f3f-71ad43c05e9b",
-  "version": 8,
   "weekStart": ""
 }
